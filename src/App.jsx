@@ -23,7 +23,7 @@ import {
 } from "lucide-react"
 import { supabase } from "./lib/supabase"
 import fergussonLogo from "./assets/fergusson-logo.jfif"
-import * as XLSX from "xlsx" 
+import * as XLSX from "xlsx"
 
 function App() {
   const [selectedYear, setSelectedYear] = useState("")
@@ -171,14 +171,24 @@ function App() {
       }
       const companyId = companyData.id
 
+      // Updated query to use students_duplicate table and join with course table using course_name
       const { data: studentsData, error: studentsError } = await supabase
         .from("placements")
-        .select("*, students(full_name, branch, graduation_year, linkedin_url)")
+        .select(`
+          *, 
+          students_duplicate(
+            full_name, 
+            graduation_year, 
+            linkedin_url,
+            course_id,
+            course(course_name)
+          )
+        `)
         .eq("placement_year", year)
         .eq("company_id", companyId)
 
       if (studentsError) throw studentsError
-      setPlacedStudents(studentsData.map((p) => p.students))
+      setPlacedStudents(studentsData.map((p) => p.students_duplicate))
 
       const { data: photosData, error: photosError } = await supabase
         .from("placement_photos")
@@ -224,20 +234,31 @@ function App() {
       if (type === "company" && selectedYear && selectedCompany) {
         studentsToDownload = placedStudents
         filename = `${selectedCompany}_${selectedYear}_placements.xlsx`
-        headers = ["Full Name", "Branch", "Graduation Year", "LinkedIn URL"]
+        headers = ["Full Name", "Course", "Graduation Year", "LinkedIn URL"]
       } else if (type === "year" && selectedYear) {
+        // Updated query for year-wise download using course_name
         const { data: yearData, error } = await supabase
           .from("placements")
-          .select("*, students(full_name, branch, graduation_year, linkedin_url), companies(name)")
+          .select(`
+            *, 
+            students_duplicate(
+              full_name, 
+              graduation_year, 
+              linkedin_url,
+              course_id,
+              course(course_name)
+            ), 
+            companies(name)
+          `)
           .eq("placement_year", selectedYear)
 
         if (error) throw error
         studentsToDownload = yearData.map((p) => ({
-          ...p.students,
+          ...p.students_duplicate,
           company_name: p.companies.name,
         }))
         filename = `All_Companies_${selectedYear}_placements.xlsx`
-        headers = ["Full Name", "Branch", "Graduation Year", "Company", "LinkedIn URL"]
+        headers = ["Full Name", "Course", "Graduation Year", "Company", "LinkedIn URL"]
       }
 
       if (studentsToDownload.length === 0) {
@@ -249,13 +270,18 @@ function App() {
         if (type === "year") {
           return [
             student.full_name,
-            student.branch || "",
+            student.course?.course_name || "",
             student.graduation_year || "",
             student.company_name || "",
             student.linkedin_url || "",
           ]
         } else {
-          return [student.full_name, student.branch || "", student.graduation_year || "", student.linkedin_url || ""]
+          return [
+            student.full_name,
+            student.course?.course_name || "",
+            student.graduation_year || "",
+            student.linkedin_url || "",
+          ]
         }
       })
 
@@ -649,7 +675,9 @@ function App() {
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <p className="font-semibold text-gray-900 dark:text-white">{student.full_name}</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-300">{student.branch}</p>
+                              <p className="text-sm text-gray-600 dark:text-gray-300">
+                                {student.course?.course_name || "Course not specified"}
+                              </p>
                               <p className="text-xs text-gray-500 dark:text-gray-400">
                                 Graduation: {student.graduation_year}
                               </p>
@@ -816,7 +844,7 @@ function App() {
       <footer className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center text-gray-600 dark:text-gray-300 transition-colors duration-200">
-            <p>&copy; {currentYear} CrackGrid - Fergusson College Pune. Made with ❤️ by students, for students.</p>
+            <p>&copy; {currentYear} CrackGrid - Fergusson College Pune. Made with ❤️ by MCS students, for students.</p>
           </div>
         </div>
       </footer>
